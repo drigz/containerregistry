@@ -157,7 +157,7 @@ class Helper(Basic):
                            stderr=subprocess.STDOUT)
     except OSError as e:
       if e.errno == errno.ENOENT:
-        raise Exception("executable not found: %s" % bin_name)
+        raise Exception('executable not found: ' + bin_name)
       raise
 
     # Some keychains expect a scheme:
