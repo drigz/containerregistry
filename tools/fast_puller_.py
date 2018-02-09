@@ -20,6 +20,7 @@ Unlike docker_puller the format this uses is proprietary.
 
 import argparse
 import logging
+import sys
 
 from containerregistry.client import docker_creds
 from containerregistry.client import docker_name
@@ -55,7 +56,7 @@ def main():
   logging_setup.Init(args=args)
 
   if not args.name or not args.directory:
-    raise Exception('--name and --directory are required arguments.')
+    logging.fatal('--name and --directory are required arguments.')
 
   retry_factory = retry.Factory()
   retry_factory = retry_factory.WithSourceTransportCallable(httplib2.Http)
@@ -77,19 +78,29 @@ def main():
 
   # Resolve the appropriate credential to use based on the standard Docker
   # client logic.
-  creds = docker_creds.DefaultKeychain.Resolve(name)
+  try:
+    creds = docker_creds.DefaultKeychain.Resolve(name)
+  # pylint: disable=broad-except
+  except Exception as e:
+    logging.fatal('Error resolving credentials for %s: %s', name, e)
+    sys.exit(1)
 
-  logging.info('Pulling v2.2 image from %r ...', name)
-  with v2_2_image.FromRegistry(name, creds, transport, accept) as v2_2_img:
-    if v2_2_img.exists():
-      save.fast(v2_2_img, args.directory, threads=_THREADS)
-      return
+  try:
+    logging.info('Pulling v2.2 image from %r ...', name)
+    with v2_2_image.FromRegistry(name, creds, transport, accept) as v2_2_img:
+      if v2_2_img.exists():
+        save.fast(v2_2_img, args.directory, threads=_THREADS)
+        return
 
-  logging.info('Pulling v2 image from %r ...', name)
-  with v2_image.FromRegistry(name, creds, transport) as v2_img:
-    with v2_compat.V22FromV2(v2_img) as v2_2_img:
-      save.fast(v2_2_img, args.directory, threads=_THREADS)
-      return
+    logging.info('Pulling v2 image from %r ...', name)
+    with v2_image.FromRegistry(name, creds, transport) as v2_img:
+      with v2_compat.V22FromV2(v2_img) as v2_2_img:
+        save.fast(v2_2_img, args.directory, threads=_THREADS)
+        return
+  # pylint: disable=broad-except
+  except Exception as e:
+    logging.fatal('Error pulling and saving image %s: %s', name, e)
+    sys.exit(1)
 
 
 if __name__ == '__main__':
